@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Recorder from '@/components/Recorder';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function RecordPage() {
   const { sessionCount, user } = useAuth();
@@ -23,33 +24,22 @@ export default function RecordPage() {
     setUploading(true);
     setMessage(null);
     try {
-      // Step 1: Get presigned upload URL
-      setMessage('Preparing upload...');
-      const presignRes = await fetch('/.netlify/functions/presign-upload', { method: 'POST' });
-      const presign = await presignRes.json();
-      if (!presignRes.ok) throw new Error(presign?.error || 'Presign failed');
-
-      if (presign.mock) {
-        setMessage('AWS not configured. Set env vars to enable uploads.');
-        return;
-      }
-
-      // Step 2: Upload to S3
+      // Step 1: Upload to Supabase Storage
       setMessage('Uploading recording...');
-      const form = new FormData();
-      Object.entries(presign.fields).forEach(([k, v]) => form.append(k, String(v)));
-      form.append('Content-Type', 'video/webm');
-      form.append('file', blobRef.current, 'recording.webm');
-      const s3Res = await fetch(presign.url, { method: 'POST', body: form });
-      if (!s3Res.ok) throw new Error('S3 upload failed');
+      const datePrefix = new Date().toISOString().slice(0, 10).replace(/-/g, '/');
+      const recordingKey = `${datePrefix}/${crypto.randomUUID()}.webm`;
+      const { error: uploadError } = await supabase.storage
+        .from('speakwall-recordings')
+        .upload(recordingKey, blobRef.current, { contentType: 'video/webm' });
+      if (uploadError) throw new Error(uploadError.message);
 
-      // Step 3: Save metadata
+      // Step 2: Save metadata
       setMessage('Saving session...');
       const metaRes = await fetch('/.netlify/functions/recording-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          recording_key: presign.key,
+          recording_key: recordingKey,
           duration_sec: elapsedRef.current,
           user_id: user.id
         })
@@ -58,17 +48,17 @@ export default function RecordPage() {
       if (!metaRes.ok) throw new Error(meta?.error || 'Failed to save session');
       const sessionId = meta.session_id;
 
-      // Step 4: Analyze speech (Whisper transcription + metrics)
+      // Step 3: Analyze speech (Whisper transcription + metrics)
       setMessage('Analyzing your speech (this may take a minute)...');
       const analyzeRes = await fetch('/.netlify/functions/analyze-speech', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, recording_key: presign.key })
+        body: JSON.stringify({ session_id: sessionId, recording_key: recordingKey })
       });
       const analysis = await analyzeRes.json();
       if (!analyzeRes.ok) throw new Error(analysis?.error || 'Analysis failed');
 
-      // Step 5: Get GPT coaching recommendations
+      // Step 4: Get GPT coaching recommendations
       setMessage('Generating coaching tips...');
       await fetch('/.netlify/functions/gpt-recommendations', {
         method: 'POST',

@@ -1,7 +1,6 @@
 import { withCors } from './_shared/cors';
 import { getServiceClient } from './_shared/supabase';
 import { ENV } from './_shared/env';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import OpenAI from 'openai';
 
 export const config = { path: '/.netlify/functions/analyze-speech' };
@@ -26,18 +25,17 @@ export const handler = withCors(async (event: any) => {
   await sb.from('speakwall_sessions').update({ status: 'processing' }).eq('id', session_id);
 
   try {
-    // Download from S3
-    const s3 = new S3Client({
-      region: ENV.AWS_REGION(),
-      credentials: { accessKeyId: ENV.AWS_ACCESS_KEY_ID(), secretAccessKey: ENV.AWS_SECRET_ACCESS_KEY() }
-    });
-    const s3Resp = await s3.send(new GetObjectCommand({ Bucket: ENV.AWS_BUCKET_NAME(), Key: recording_key }));
-    const audioBytes = await s3Resp.Body?.transformToByteArray();
-    if (!audioBytes) throw new Error('Failed to download recording from S3');
+    // Download from Supabase Storage
+    const { data: fileData, error: dlError } = await sb.storage
+      .from('speakwall-recordings')
+      .download(recording_key);
+    if (dlError || !fileData) throw new Error(dlError?.message || 'Failed to download recording');
+
+    const arrayBuf = await fileData.arrayBuffer();
+    const buffer = Buffer.from(arrayBuf);
 
     // Transcribe with Whisper
     const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY() });
-    const buffer = Buffer.from(audioBytes);
     const file = new File([buffer], 'recording.webm', { type: 'video/webm' });
     const transcription = await openai.audio.transcriptions.create({
       model: 'whisper-1',
