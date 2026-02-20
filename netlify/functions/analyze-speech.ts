@@ -37,7 +37,8 @@ export const handler = withCors(async (event: any) => {
 
     // Transcribe with Whisper
     const openai = new OpenAI({ apiKey: ENV.OPENAI_API_KEY() });
-    const file = new File([audioBytes], 'recording.webm', { type: 'video/webm' });
+    const buffer = Buffer.from(audioBytes);
+    const file = new File([buffer], 'recording.webm', { type: 'video/webm' });
     const transcription = await openai.audio.transcriptions.create({
       model: 'whisper-1',
       file,
