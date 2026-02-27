@@ -5,24 +5,25 @@
 **Status:** Active
 
 ## What This Was
-Standalone app or experiment
+Public speaking practice simulator with AI feedback
 
 ## Current State
-Active — last pushed 2026-02-20. Part of current GP3 platform or active development.
+Active — Netlify + Supabase
 
 ## Agent Replacement
-**Agent Name:** SpeakWall
+**Agent Name:** N/A (standalone app)
 **Lives On:** Netlify (static)
 **Orchestrator:** N/A
 **Endpoint or Trigger:** https://speakwall.netlify.app
 **Supabase Table:** GP3 project (ezlmmegowggujpcnzoda)
 
 ## Handoff Notes
-This repo's core function was: Authentication/access control. Business context: Standalone app or experiment.
+Core function: Record speeches, get AI scoring, track improvement over sessions. Context: Public speaking practice simulator with AI feedback
 
 ## Dependencies
 - Supabase (GP3 project ezlmmegowggujpcnzoda)
 - Netlify deployment
+- Stripe billing
 
 ## Last Known Working State
 2026-02-20
